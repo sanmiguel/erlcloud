@@ -115,8 +115,10 @@ aws_request(Method, Protocol, Host, Port, Path, Params, #aws_config{} = Config) 
             erlang:error({aws_error, Reason})
     end.
 aws_request(Method, Protocol, Host, Port, Path, Params, AccessKeyID, SecretAccessKey) ->
+    Config = default_config(),
+    %% TODO Do we need to nerf the Token in case it was set?
     aws_request(Method, Protocol, Host, Port, Path, Params,
-                #aws_config{access_key_id = AccessKeyID, secret_access_key = SecretAccessKey}).
+                Config#aws_config{access_key_id = AccessKeyID, secret_access_key = SecretAccessKey}).
 
 %% aws_request2 returns {ok, Body} or {error, Reason} instead of throwing as aws_request does
 %% This is the preferred pattern for new APIs
@@ -533,16 +535,17 @@ config_env() ->
           os_getenv(?AWS_SESSION)} of
         {KeyId, Secret, T} when is_list(KeyId), is_list(Secret) ->
             Token = if is_list(T) -> T; true -> undefined end,
-            Config = #aws_config{access_key_id = KeyId,
-                                 secret_access_key = Secret,
-                                 security_token = Token},
+            DfltConfig = default_config(),
+            Config = DfltConfig#aws_config{access_key_id = KeyId,
+                                           secret_access_key = Secret,
+                                           security_token = Token},
             {ok, Config};
         _ -> {error, environment_config_unavailable}
     end.
 
 -spec config_metadata(task_credentials | instance_metadata) -> {ok, #metadata_credentials{}} | {error, metadata_not_available | container_credentials_unavailable | httpc_result_error()}.
 config_metadata(Source) ->
-    Config = #aws_config{},
+    Config = default_config(),
     case get_metadata_credentials( Source, Config ) of
         {ok, #metadata_credentials{
                 access_key_id = Id,
@@ -1299,7 +1302,7 @@ profiles_credentials( Keys, SourceProfile ) ->
     {cont, SourceProfile, RoleArn, ExternalId}.
 
 profiles_assume( Credential, undefined, __ExternalId, _Options ) ->
-    RCfg = default_config_region(#aws_config{}, default_config_get(?AWS_REGION, aws_region)),
+    RCfg = default_config(),
     Config = config_credential(Credential, RCfg),
     {ok, Config};
 profiles_assume( Credential, Role, ExternalId,
@@ -1309,7 +1312,7 @@ profiles_assume( Credential, Role, ExternalId,
     ExtId = if ExternalId =/= undefined -> ExternalId;
                ExternalId =:= undefined -> DefaultExternalId
             end,
-    RCfg = default_config_region(#aws_config{}, default_config_get(?AWS_REGION, aws_region)),
+    RCfg = default_config(),
     Config = config_credential(Credential, RCfg),
     {AssumedConfig, _Creds} =
         erlcloud_sts:assume_role( Config, Role, Name, Duration, ExtId ),
